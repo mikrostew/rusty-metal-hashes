@@ -1,0 +1,15 @@
+[package]
+name = "rusty-metal-hashes"
+version = "0.0.0"
+description = "Rust API for hash algorithms running on GPU using Metal Shading Language"
+homepage = "https://github.com/mikrostew/rusty-metal-hashes"
+repository = "https://github.com/mikrostew/rusty-metal-hashes"
+authors = ["mikrostew@gmail.com"]
+readme = "README.md"
+license = "MIT"
+edition = "2021"
+exclude = ["Cargo.lock", "target/**/*"]
+
+[dependencies]
+metal = "0.23.1"
+objc = "0.2.7"
