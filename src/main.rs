@@ -4,6 +4,8 @@ use metal::*;
 use objc::rc::autoreleasepool;
 use std::mem;
 
+mod sha256;
+
 // TODO: build this string using macros?
 static LIBRARY_SRC: &str = "#include <metal_stdlib>
 
@@ -101,5 +103,8 @@ fn main() {
             println!("{}", *ptr);
             assert_eq!(465, *ptr);
         }
+
+        let hash = sha256::Hash::from_bytes("abc".as_bytes());
+        assert_eq!(hash, "0123456789abcdef");
     });
 }
