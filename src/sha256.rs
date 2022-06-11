@@ -13,9 +13,10 @@
    SHA-256        < 2^64         512          32             256
 */
 
-//const BLOCK_SIZE: usize  = 512 / 8;
+const WORD_SIZE: usize = 32;
+const BLOCK_SIZE_BYTES: usize = 512 / 8;
+const BLOCK_SIZE_WORDS: usize = 512 / WORD_SIZE;
 const DIGEST_SIZE: usize = 256 / 8;
-//const WORD_SIZE: usize = 32 / 8;
 
 // the output of the sha256 hash function
 pub struct Hash {
@@ -202,6 +203,7 @@ impl Hash {
 // this will run the sha256 hash algo on the CPU
 pub struct CpuHasher {
     H: [u32; 8],
+    buffer: [u32; BLOCK_SIZE_WORDS],
 }
 
 impl CpuHasher {
@@ -212,6 +214,7 @@ impl CpuHasher {
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
             ],
+            buffer: [0; BLOCK_SIZE_WORDS],
         }
     }
 }
@@ -300,37 +303,116 @@ impl CpuHasher {
 
    H0(N) || H1(N) || H2(N) || H3(N) || H4(N) || H5(N) || H6(N) || H7(N)
 */
+macro_rules! iteration0to15( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr, $M:expr) => (
+        // prepare the message schedule
+        $W[$t] = $M[$t];
+        // hash computations
+        let T1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
+        let T2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
+        $h = $g;
+        $g = $f;
+        $f = $e;
+        $e = $d.wrapping_add(T1);
+        $d = $c;
+        $c = $b;
+        $b = $a;
+        $a = T1.wrapping_add(T2);
+) );
+macro_rules! iteration16to63( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr) => (
+        // prepare the message schedule
+        $W[$t] = sigma1!($W[$t-2]).wrapping_add($W[$t-7]).wrapping_add(sigma0!($W[$t-15])).wrapping_add($W[$t-16]);
+        // hash computations
+        let T1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
+        let T2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
+        $h = $g;
+        $g = $f;
+        $f = $e;
+        $e = $d.wrapping_add(T1);
+        $d = $c;
+        $c = $b;
+        $b = $a;
+        $a = T1.wrapping_add(T2);
+) );
 
 impl CpuHasher {
     fn hash_block(&self) {
-        let a = self.H[0];
-        let b = self.H[1];
-        let c = self.H[2];
-        let d = self.H[3];
-        let e = self.H[4];
-        let f = self.H[5];
-        let g = self.H[6];
-        let h = self.H[7];
+        let mut a = self.H[0];
+        let mut b = self.H[1];
+        let mut c = self.H[2];
+        let mut d = self.H[3];
+        let mut e = self.H[4];
+        let mut f = self.H[5];
+        let mut g = self.H[6];
+        let mut h = self.H[7];
 
-        // TODO: prepare the message schedule
+        let mut W: [u32; BLOCK_SIZE_WORDS] = [0; BLOCK_SIZE_WORDS];
 
-        // TODO: for each iteration, t = 0 to 63
-        // (probably just unroll that whole loop?)
+        // unroll the loop
+        iteration0to15!(0, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(1, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(2, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(3, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(4, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(5, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(6, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(7, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(8, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(9, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(10, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(11, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(12, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(13, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(14, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(15, a, b, c, d, e, f, g, h, W, self.buffer);
 
-        //for 0 <= t <= 15,  Wt = Mt(i)
-        //for 16 <= t <= 63,  Wt = σ1{256}(Wt-2) + Wt-7 + σ0{256}(Wt-15) + Wt-16
-
-        // TODO: this can be a macro as well
-        // let T1 = h + Sigma1!(e) + K[t] + W[t];
-        // let T2 = Sigma0!(a) + Maj!(a, b, c);
-        // h = g;
-        // g = f;
-        // f = e;
-        // e = d + T1;
-        // d = c;
-        // c = b;
-        // b = a;
-        // a = T1 + T2;
+        iteration16to63!(16, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(17, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(18, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(19, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(20, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(21, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(22, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(23, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(24, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(25, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(26, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(27, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(28, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(29, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(30, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(31, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(32, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(33, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(34, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(35, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(36, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(37, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(38, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(39, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(40, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(41, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(42, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(43, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(44, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(45, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(46, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(47, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(48, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(49, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(50, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(51, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(52, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(53, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(54, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(55, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(56, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(57, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(58, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(59, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(60, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(61, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(62, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(63, a, b, c, d, e, f, g, h, W);
 
         self.H[0] = self.H[0].wrapping_add(a);
         self.H[1] = self.H[0].wrapping_add(b);
