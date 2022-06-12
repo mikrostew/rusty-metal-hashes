@@ -16,11 +16,11 @@
 const WORD_SIZE: usize = 32;
 const BLOCK_SIZE_BYTES: usize = 512 / 8;
 const BLOCK_SIZE_WORDS: usize = 512 / WORD_SIZE;
-const DIGEST_SIZE: usize = 256 / 8;
+const DIGEST_SIZE_BYTES: usize = 256 / 8;
 
 // the output of the sha256 hash function
 pub struct Hash {
-    digest: [u8; DIGEST_SIZE],
+    digest: [u8; DIGEST_SIZE_BYTES],
 }
 
 /*
@@ -161,10 +161,15 @@ const K: [u32; 64] = [
 */
 impl Hash {
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        // TODO: actually to the hashing
-        Hash {
-            digest: [0; DIGEST_SIZE],
-        }
+        let h = CpuHasher::new();
+        h.push(bytes);
+        h.finalize();
+        Hash { digest: h.digest() }
+    }
+
+    pub fn hex_digest(&self) -> String {
+        // TODO: macro-ize this (somehow), taking in the digest length
+        format!("{:02x}", self.digest[0] /* , etc... */)
     }
 }
 
@@ -204,6 +209,8 @@ impl Hash {
 pub struct CpuHasher {
     H: [u32; 8],
     buffer: [u32; BLOCK_SIZE_WORDS],
+    // total length of input data (in bytes? bits? not sure...)
+    data_length: u64,
 }
 
 impl CpuHasher {
@@ -215,7 +222,57 @@ impl CpuHasher {
                 0x5be0cd19,
             ],
             buffer: [0; BLOCK_SIZE_WORDS],
+            data_length: 0,
         }
+    }
+
+    fn push(&self, bytes: &[u8]) {
+        // TODO: copy over the bytes from the data and hash each block
+    }
+
+    fn finalize(&self) {
+        // TODO: add 0x80, pad with zeros, add the length, and hash the final block
+    }
+
+    // provide the digest as a byte array (instead of words)
+    fn digest(&self) -> [u8; DIGEST_SIZE_BYTES] {
+        // convert these u32 -> u8
+        // TODO: macro
+        // (also, do I actually have to mask with 0xFF?)
+        [
+            ((self.H[0] >> 24) & 0xFF) as u8,
+            ((self.H[0] >> 16) & 0xFF) as u8,
+            ((self.H[0] >> 8) & 0xFF) as u8,
+            ((self.H[0]) & 0xFF) as u8,
+            ((self.H[1] >> 24) & 0xFF) as u8,
+            ((self.H[1] >> 16) & 0xFF) as u8,
+            ((self.H[1] >> 8) & 0xFF) as u8,
+            ((self.H[1]) & 0xFF) as u8,
+            ((self.H[2] >> 24) & 0xFF) as u8,
+            ((self.H[2] >> 16) & 0xFF) as u8,
+            ((self.H[2] >> 8) & 0xFF) as u8,
+            ((self.H[2]) & 0xFF) as u8,
+            ((self.H[3] >> 24) & 0xFF) as u8,
+            ((self.H[3] >> 16) & 0xFF) as u8,
+            ((self.H[3] >> 8) & 0xFF) as u8,
+            ((self.H[3]) & 0xFF) as u8,
+            ((self.H[4] >> 24) & 0xFF) as u8,
+            ((self.H[4] >> 16) & 0xFF) as u8,
+            ((self.H[4] >> 8) & 0xFF) as u8,
+            ((self.H[4]) & 0xFF) as u8,
+            ((self.H[5] >> 24) & 0xFF) as u8,
+            ((self.H[5] >> 16) & 0xFF) as u8,
+            ((self.H[5] >> 8) & 0xFF) as u8,
+            ((self.H[5]) & 0xFF) as u8,
+            ((self.H[6] >> 24) & 0xFF) as u8,
+            ((self.H[6] >> 16) & 0xFF) as u8,
+            ((self.H[6] >> 8) & 0xFF) as u8,
+            ((self.H[6]) & 0xFF) as u8,
+            ((self.H[7] >> 24) & 0xFF) as u8,
+            ((self.H[7] >> 16) & 0xFF) as u8,
+            ((self.H[7] >> 8) & 0xFF) as u8,
+            ((self.H[7]) & 0xFF) as u8,
+        ]
     }
 }
 
@@ -305,7 +362,9 @@ impl CpuHasher {
 */
 macro_rules! iteration0to15( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr, $M:expr) => (
         // prepare the message schedule
+        // TODO, actually, remove this
         $W[$t] = $M[$t];
+
         // hash computations
         let T1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
         let T2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
@@ -345,6 +404,7 @@ impl CpuHasher {
         let mut g = self.H[6];
         let mut h = self.H[7];
 
+        // TODO: convert the [u8; BLOCK_SIZE_BYTES] -> [u32; BLOCK_SIZE_WORDS] here
         let mut W: [u32; BLOCK_SIZE_WORDS] = [0; BLOCK_SIZE_WORDS];
 
         // unroll the loop
