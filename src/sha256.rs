@@ -168,8 +168,8 @@ impl Hash {
     }
 
     pub fn hex_digest(&self) -> String {
-        // TODO: macro-ize this (somehow), taking in the digest length
-        format!("{:02x}", self.digest[0] /* , etc... */)
+        // dunno if this is the most efficient way, but it's the simplest
+        self.digest.iter().map(|e| format!("{:02x}", e)).collect()
     }
 }
 
@@ -207,7 +207,7 @@ impl Hash {
 
 // this will run the sha256 hash algo on the CPU
 pub struct CpuHasher {
-    H: [u32; 8],
+    h: [u32; 8],
     buffer: [u32; BLOCK_SIZE_WORDS],
     // total length of input data (in bytes? bits? not sure...)
     data_length: u64,
@@ -217,7 +217,7 @@ impl CpuHasher {
     fn new() -> Self {
         CpuHasher {
             // initial hash value
-            H: [
+            h: [
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
             ],
@@ -237,41 +237,40 @@ impl CpuHasher {
     // provide the digest as a byte array (instead of words)
     fn digest(&self) -> [u8; DIGEST_SIZE_BYTES] {
         // convert these u32 -> u8
-        // TODO: macro
-        // (also, do I actually have to mask with 0xFF?)
+        // TODO: can I macro-ize these?
         [
-            ((self.H[0] >> 24) & 0xFF) as u8,
-            ((self.H[0] >> 16) & 0xFF) as u8,
-            ((self.H[0] >> 8) & 0xFF) as u8,
-            ((self.H[0]) & 0xFF) as u8,
-            ((self.H[1] >> 24) & 0xFF) as u8,
-            ((self.H[1] >> 16) & 0xFF) as u8,
-            ((self.H[1] >> 8) & 0xFF) as u8,
-            ((self.H[1]) & 0xFF) as u8,
-            ((self.H[2] >> 24) & 0xFF) as u8,
-            ((self.H[2] >> 16) & 0xFF) as u8,
-            ((self.H[2] >> 8) & 0xFF) as u8,
-            ((self.H[2]) & 0xFF) as u8,
-            ((self.H[3] >> 24) & 0xFF) as u8,
-            ((self.H[3] >> 16) & 0xFF) as u8,
-            ((self.H[3] >> 8) & 0xFF) as u8,
-            ((self.H[3]) & 0xFF) as u8,
-            ((self.H[4] >> 24) & 0xFF) as u8,
-            ((self.H[4] >> 16) & 0xFF) as u8,
-            ((self.H[4] >> 8) & 0xFF) as u8,
-            ((self.H[4]) & 0xFF) as u8,
-            ((self.H[5] >> 24) & 0xFF) as u8,
-            ((self.H[5] >> 16) & 0xFF) as u8,
-            ((self.H[5] >> 8) & 0xFF) as u8,
-            ((self.H[5]) & 0xFF) as u8,
-            ((self.H[6] >> 24) & 0xFF) as u8,
-            ((self.H[6] >> 16) & 0xFF) as u8,
-            ((self.H[6] >> 8) & 0xFF) as u8,
-            ((self.H[6]) & 0xFF) as u8,
-            ((self.H[7] >> 24) & 0xFF) as u8,
-            ((self.H[7] >> 16) & 0xFF) as u8,
-            ((self.H[7] >> 8) & 0xFF) as u8,
-            ((self.H[7]) & 0xFF) as u8,
+            (self.h[0] >> 24) as u8,
+            (self.h[0] >> 16) as u8,
+            (self.h[0] >> 8) as u8,
+            (self.h[0]) as u8,
+            (self.h[1] >> 24) as u8,
+            (self.h[1] >> 16) as u8,
+            (self.h[1] >> 8) as u8,
+            (self.h[1]) as u8,
+            (self.h[2] >> 24) as u8,
+            (self.h[2] >> 16) as u8,
+            (self.h[2] >> 8) as u8,
+            (self.h[2]) as u8,
+            (self.h[3] >> 24) as u8,
+            (self.h[3] >> 16) as u8,
+            (self.h[3] >> 8) as u8,
+            (self.h[3]) as u8,
+            (self.h[4] >> 24) as u8,
+            (self.h[4] >> 16) as u8,
+            (self.h[4] >> 8) as u8,
+            (self.h[4]) as u8,
+            (self.h[5] >> 24) as u8,
+            (self.h[5] >> 16) as u8,
+            (self.h[5] >> 8) as u8,
+            (self.h[5]) as u8,
+            (self.h[6] >> 24) as u8,
+            (self.h[6] >> 16) as u8,
+            (self.h[6] >> 8) as u8,
+            (self.h[6]) as u8,
+            (self.h[7] >> 24) as u8,
+            (self.h[7] >> 16) as u8,
+            (self.h[7] >> 8) as u8,
+            (self.h[7]) as u8,
         ]
     }
 }
@@ -360,127 +359,168 @@ impl CpuHasher {
 
    H0(N) || H1(N) || H2(N) || H3(N) || H4(N) || H5(N) || H6(N) || H7(N)
 */
-macro_rules! iteration0to15( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr, $M:expr) => (
-        // prepare the message schedule
-        // TODO, actually, remove this
-        $W[$t] = $M[$t];
-
+macro_rules! iteration0to15( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr) => (
         // hash computations
-        let T1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
-        let T2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
+        let t1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
+        let t2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
         $h = $g;
         $g = $f;
         $f = $e;
-        $e = $d.wrapping_add(T1);
+        $e = $d.wrapping_add(t1);
         $d = $c;
         $c = $b;
         $b = $a;
-        $a = T1.wrapping_add(T2);
+        $a = t1.wrapping_add(t2);
 ) );
 macro_rules! iteration16to63( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr) => (
         // prepare the message schedule
         $W[$t] = sigma1!($W[$t-2]).wrapping_add($W[$t-7]).wrapping_add(sigma0!($W[$t-15])).wrapping_add($W[$t-16]);
         // hash computations
-        let T1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
-        let T2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
+        let t1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
+        let t2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
         $h = $g;
         $g = $f;
         $f = $e;
-        $e = $d.wrapping_add(T1);
+        $e = $d.wrapping_add(t1);
         $d = $c;
         $c = $b;
         $b = $a;
-        $a = T1.wrapping_add(T2);
+        $a = t1.wrapping_add(t2);
 ) );
 
 impl CpuHasher {
-    fn hash_block(&self) {
-        let mut a = self.H[0];
-        let mut b = self.H[1];
-        let mut c = self.H[2];
-        let mut d = self.H[3];
-        let mut e = self.H[4];
-        let mut f = self.H[5];
-        let mut g = self.H[6];
-        let mut h = self.H[7];
+    fn hash_block(&mut self) {
+        let mut a = self.h[0];
+        let mut b = self.h[1];
+        let mut c = self.h[2];
+        let mut d = self.h[3];
+        let mut e = self.h[4];
+        let mut f = self.h[5];
+        let mut g = self.h[6];
+        let mut h = self.h[7];
 
-        // TODO: convert the [u8; BLOCK_SIZE_BYTES] -> [u32; BLOCK_SIZE_WORDS] here
-        let mut W: [u32; BLOCK_SIZE_WORDS] = [0; BLOCK_SIZE_WORDS];
+        // prepare the message schedule
+        // convert [u8; BLOCK_SIZE_BYTES] -> [u32; BLOCK_SIZE_WORDS]
+        let mut w: [u32; BLOCK_SIZE_WORDS] = [0; BLOCK_SIZE_WORDS];
+        for (i, bytes) in self.buffer.chunks(4).enumerate() {
+            // TODO: macro?
+            w[i] = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
+        }
 
         // unroll the loop
-        iteration0to15!(0, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(1, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(2, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(3, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(4, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(5, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(6, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(7, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(8, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(9, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(10, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(11, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(12, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(13, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(14, a, b, c, d, e, f, g, h, W, self.buffer);
-        iteration0to15!(15, a, b, c, d, e, f, g, h, W, self.buffer);
+        iteration0to15!(0, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(1, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(2, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(3, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(4, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(5, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(6, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(7, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(8, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(9, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(10, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(11, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(12, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(13, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(14, a, b, c, d, e, f, g, h, w);
+        iteration0to15!(15, a, b, c, d, e, f, g, h, w);
 
-        iteration16to63!(16, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(17, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(18, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(19, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(20, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(21, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(22, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(23, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(24, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(25, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(26, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(27, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(28, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(29, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(30, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(31, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(32, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(33, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(34, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(35, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(36, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(37, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(38, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(39, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(40, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(41, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(42, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(43, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(44, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(45, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(46, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(47, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(48, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(49, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(50, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(51, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(52, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(53, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(54, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(55, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(56, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(57, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(58, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(59, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(60, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(61, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(62, a, b, c, d, e, f, g, h, W);
-        iteration16to63!(63, a, b, c, d, e, f, g, h, W);
+        iteration16to63!(16, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(17, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(18, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(19, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(20, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(21, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(22, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(23, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(24, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(25, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(26, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(27, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(28, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(29, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(30, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(31, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(32, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(33, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(34, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(35, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(36, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(37, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(38, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(39, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(40, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(41, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(42, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(43, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(44, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(45, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(46, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(47, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(48, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(49, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(50, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(51, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(52, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(53, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(54, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(55, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(56, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(57, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(58, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(59, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(60, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(61, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(62, a, b, c, d, e, f, g, h, w);
+        iteration16to63!(63, a, b, c, d, e, f, g, h, w);
 
-        self.H[0] = self.H[0].wrapping_add(a);
-        self.H[1] = self.H[0].wrapping_add(b);
-        self.H[2] = self.H[0].wrapping_add(c);
-        self.H[3] = self.H[0].wrapping_add(d);
-        self.H[4] = self.H[0].wrapping_add(e);
-        self.H[5] = self.H[0].wrapping_add(f);
-        self.H[6] = self.H[0].wrapping_add(g);
-        self.H[7] = self.H[0].wrapping_add(h);
+        self.h[0] = self.h[0].wrapping_add(a);
+        self.h[1] = self.h[0].wrapping_add(b);
+        self.h[2] = self.h[0].wrapping_add(c);
+        self.h[3] = self.h[0].wrapping_add(d);
+        self.h[4] = self.h[0].wrapping_add(e);
+        self.h[5] = self.h[0].wrapping_add(f);
+        self.h[6] = self.h[0].wrapping_add(g);
+        self.h[7] = self.h[0].wrapping_add(h);
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    mod hash {
+        use super::super::Hash;
+
+        #[test]
+        fn hex_digest() {
+            let test_hash = Hash {
+                digest: [
+                    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+                    22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
+                ],
+            };
+            assert_eq!(
+                test_hash.hex_digest(),
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+            );
+        }
+    }
+
+    mod cpuhasher {
+        use super::super::CpuHasher;
+
+        #[test]
+        fn digest() {
+            let test_hasher = CpuHasher::new();
+            // digest of initial hash value
+            assert_eq!(
+                test_hasher.digest(),
+                [
+                    0x6a, 0x09, 0xe6, 0x67, 0xbb, 0x67, 0xae, 0x85, 0x3c, 0x6e, 0xf3, 0x72, 0xa5,
+                    0x4f, 0xf5, 0x3a, 0x51, 0x0e, 0x52, 0x7f, 0x9b, 0x05, 0x68, 0x8c, 0x1f, 0x83,
+                    0xd9, 0xab, 0x5b, 0xe0, 0xcd, 0x19,
+                ]
+            );
+        }
     }
 }
