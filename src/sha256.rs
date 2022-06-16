@@ -256,8 +256,35 @@ impl CpuHasher {
         }
     }
 
-    // TODO: add 0x80, pad with zeros, add the length, and hash the final block
-    fn finalize(&self) {}
+    // do padding and hash the final block
+    fn finalize(&mut self) {
+        // message length is in bits
+        let message_length = self.data_length * 8;
+        let zeros = [0; BLOCK_SIZE_BYTES];
+        // add a single 1-bit, then all zeros, leaving 8 bytes for the length
+        self.push(&[0x80]);
+        let mut buffer_position = self.data_length % BLOCK_SIZE_BYTES;
+        let buffer_space = BLOCK_SIZE_BYTES - buffer_position;
+        // fill current block if there less than 8 bytes remaining
+        if buffer_space < 8 {
+            self.push(&zeros[..buffer_space]);
+        }
+        buffer_position = self.data_length % BLOCK_SIZE_BYTES;
+        let zeros_length = BLOCK_SIZE_BYTES - 8 - buffer_position;
+        self.push(&zeros[..zeros_length]);
+        // convert length to byte array, and push that
+        self.push(&[
+            ((message_length >> 56) & 0xFF) as u8,
+            ((message_length >> 48) & 0xFF) as u8,
+            ((message_length >> 40) & 0xFF) as u8,
+            ((message_length >> 32) & 0xFF) as u8,
+            ((message_length >> 24) & 0xFF) as u8,
+            ((message_length >> 16) & 0xFF) as u8,
+            ((message_length >> 8) & 0xFF) as u8,
+            ((message_length >> 0) & 0xFF) as u8,
+        ]);
+        // after that the final block should have been hashed
+    }
 
     // provide the digest as a byte array (instead of words)
     fn digest(&self) -> [u8; DIGEST_SIZE_BYTES] {
