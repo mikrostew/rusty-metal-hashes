@@ -113,7 +113,7 @@ macro_rules! SHR( ($n:expr, $x:expr) => ($x >> $n) );
 
     σ1{256}(x) = ROTR^17(x) ⊕ ROTR^19(x) ⊕ SHR^10(x)
 */
-macro_rules! Ch( ($x:expr, $y:expr, $z:expr) => (($x & $y) ^ (-$x & $z)) );
+macro_rules! Ch( ($x:expr, $y:expr, $z:expr) => (($x & $y) ^ (!$x & $z)) );
 macro_rules! Maj( ($x:expr, $y:expr, $z:expr) => (($x & $y) ^ ($x & $z) ^ ($y & $z)) );
 
 macro_rules! Sigma0( ($x:expr) => (ROTR!(2, $x) ^ ROTR!(13, $x) ^ ROTR!(22, $x)) );
@@ -161,7 +161,7 @@ const K: [u32; 64] = [
 */
 impl Hash {
     pub fn from_bytes(bytes: &[u8]) -> Self {
-        let h = CpuHasher::new();
+        let mut h = CpuHasher::new();
         h.push(bytes);
         h.finalize();
         Hash { digest: h.digest() }
@@ -208,9 +208,9 @@ impl Hash {
 // this will run the sha256 hash algo on the CPU
 pub struct CpuHasher {
     h: [u32; 8],
-    buffer: [u32; BLOCK_SIZE_WORDS],
-    // total length of input data (in bytes? bits? not sure...)
-    data_length: u64,
+    buffer: [u8; BLOCK_SIZE_BYTES],
+    // total length of input data (in bytes)
+    data_length: usize,
 }
 
 impl CpuHasher {
@@ -221,18 +221,43 @@ impl CpuHasher {
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
                 0x5be0cd19,
             ],
-            buffer: [0; BLOCK_SIZE_WORDS],
+            buffer: [0; BLOCK_SIZE_BYTES],
             data_length: 0,
         }
     }
 
-    fn push(&self, bytes: &[u8]) {
-        // TODO: copy over the bytes from the data and hash each block
+    // add bytes to be hashed
+    fn push(&mut self, input_bytes: &[u8]) {
+        let mut input_offset = 0;
+        let input_length = input_bytes.len();
+        // copy over the bytes from the data and hash each block
+        while input_offset < input_length {
+            // where are we in the buffer?
+            let buffer_position = self.data_length % BLOCK_SIZE_BYTES;
+            let buffer_space = BLOCK_SIZE_BYTES - buffer_position;
+            let input_remaining = input_length - input_offset;
+            // copy over either
+            //  - enough bytes to fill the buffer, or
+            //  - the rest of the input,
+            // whichever is smaller
+            let copy_length = if input_remaining > buffer_space {
+                buffer_space
+            } else {
+                input_remaining
+            };
+            self.buffer[buffer_position..buffer_position + copy_length]
+                .copy_from_slice(&input_bytes[input_offset..input_offset + copy_length]);
+            self.data_length += copy_length;
+            input_offset += copy_length;
+            // if that filled the buffer, hash the block
+            if self.data_length % BLOCK_SIZE_BYTES == 0 {
+                self.hash_block();
+            }
+        }
     }
 
-    fn finalize(&self) {
-        // TODO: add 0x80, pad with zeros, add the length, and hash the final block
-    }
+    // TODO: add 0x80, pad with zeros, add the length, and hash the final block
+    fn finalize(&self) {}
 
     // provide the digest as a byte array (instead of words)
     fn digest(&self) -> [u8; DIGEST_SIZE_BYTES] {
@@ -330,7 +355,7 @@ impl CpuHasher {
 
      3. For t = 0 to 63:
 
-        T1 = h + Σ1{256}(e) + Kt{256} + Wt
+        T1 = h + Σ1{256}(e) + Ch(e,f,g) + Kt{256} + Wt
         T2 = Σ0{256}(a) + Maj(a, b, c)
          h = g
          g = f
@@ -361,7 +386,7 @@ impl CpuHasher {
 */
 macro_rules! iteration0to15( ($t:expr, $a:expr, $b:expr, $c:expr, $d:expr, $e:expr, $f:expr, $g:expr, $h:expr, $W:expr) => (
         // hash computations
-        let t1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(K[$t]).wrapping_add($W[$t]);
+        let t1 = $h.wrapping_add(Sigma1!($e)).wrapping_add(Ch!($e, $f, $g)).wrapping_add(K[$t]).wrapping_add($W[$t]);
         let t2 = Sigma0!($a).wrapping_add(Maj!($a, $b, $c));
         $h = $g;
         $g = $f;
@@ -400,11 +425,13 @@ impl CpuHasher {
         let mut h = self.h[7];
 
         // prepare the message schedule
+        let mut w: [u32; 64] = [0; 64];
         // convert [u8; BLOCK_SIZE_BYTES] -> [u32; BLOCK_SIZE_WORDS]
-        let mut w: [u32; BLOCK_SIZE_WORDS] = [0; BLOCK_SIZE_WORDS];
         for (i, bytes) in self.buffer.chunks(4).enumerate() {
-            // TODO: macro?
-            w[i] = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + bytes[3];
+            w[i] = ((bytes[0] as u32) << 24)
+                + ((bytes[1] as u32) << 16)
+                + ((bytes[2] as u32) << 8)
+                + (bytes[3] as u32);
         }
 
         // unroll the loop
